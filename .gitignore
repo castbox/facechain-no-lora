@@ -132,3 +132,7 @@ result.mp4
 
 # ast template
 ast_index_file.py
+
+
+# the images generated
+generated/

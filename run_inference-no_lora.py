@@ -39,26 +39,26 @@ use_depth_control = False
 use_pose_model = False
 pose_image = 'poses/man/pose1.png'
 processed_dir = './processed/white_women'
-num_generate = 5
-base_model = 'ly261666/cv_portrait_model'
-revision = 'v2.0'
-multiplier_style = 0.25
-multiplier_human = 0.85
-base_model_sub_dir = 'film/film'
-train_output_dir = './output/white_women'
-output_dir = './generated/white_women_1'
-style = styles[4]
-model_id = style['model_id']
+num_generate = 10
 
-if model_id == None:
+base_model = base_models[2]
+base_model_id = base_model['model_id']
+revision = 'v2.0'
+
+base_model_sub_dir = base_model['sub_path']
+train_output_dir = './output/white_women'
+output_dir = './generated/white_women_step_30_2'
+style = styles[1]
+style_model_id = style['model_id']
+
+if base_model_id == None:
     style_model_path = None
     pos_prompt = generate_pos_prompt(style['name'], style['add_prompt_style'])
 else:
-    if os.path.exists(model_id):
-        model_dir = model_id
+    if os.path.exists(base_model_id):
+        model_dir = base_model_id
     else:
-        model_dir = snapshot_download(model_id, revision=style['revision'])
-    style_model_path = os.path.join(model_dir, style['bin_file'])
+        model_dir = snapshot_download(base_model_id, revision=style['revision'])
     pos_prompt = generate_pos_prompt(style['name'], style['add_prompt_style'])  # style has its own prompt
 
 if not use_pose_model:
@@ -69,12 +69,21 @@ else:
     model_dir = snapshot_download('damo/face_chain_control_model', revision='v1.0.1')
     pose_model_path = os.path.join(model_dir, 'model_controlnet/control_v11p_sd15_openpose')
 
+# hacky way to overwrite the positive prompt generated before
+pos_prompt = style['add_prompt_style']
+
+print("------------------")
+print(f"Debug Info: the pos prompt used is: {pos_prompt} ")
+print(f"Debug Info: the neg prompt used is: {neg_prompt} ")
+print(f"Debug Info: the model dir is: {model_dir} ")
+print("------------------")
+
 gen_portrait = GenPortraitNoLora(pose_model_path, pose_image, use_depth_control, pos_prompt, neg_prompt,
                            use_main_model,
                            use_face_swap, use_post_process,
                            use_stylization)
 
-outputs = gen_portrait(processed_dir, num_generate, base_model,
+outputs = gen_portrait(processed_dir, num_generate, base_model_id,
                        train_output_dir, base_model_sub_dir, revision)
 
 os.makedirs(output_dir, exist_ok=True)

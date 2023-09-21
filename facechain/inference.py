@@ -40,7 +40,7 @@ def txt2img(pipe, pos_prompt, neg_prompt, num_images=10):
     images_out = []
     for i in range(int(num_images / batch_size)):
         images_style = pipe(prompt=pos_prompt, height=768, width=1024, guidance_scale=7, negative_prompt=neg_prompt,
-                            num_inference_steps=60, num_images_per_prompt=batch_size).images
+                            num_inference_steps=30, num_images_per_prompt=batch_size).images
         images_out.extend(images_style)
     
     print("Debug Info: the positive prompt used is: {}".format(pos_prompt))
@@ -626,7 +626,12 @@ class GenPortraitNoLora:
 
     def __call__(self, input_img_dir, num_gen_images=6, base_model_path=None,
                  lora_model_path=None, sub_path=None, revision=None):
-        base_model_path = snapshot_download(base_model_path, revision=revision)
+
+        if os.path.exists(base_model_path):
+                base_model_path = base_model_path
+        else:
+            base_model_path = snapshot_download(base_model_path, revision=revision)
+
         if sub_path is not None and len(sub_path) > 0:
             base_model_path = os.path.join(base_model_path, sub_path)
 
