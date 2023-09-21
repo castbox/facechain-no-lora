@@ -5,14 +5,14 @@ export DATASET_NAME=$4
 export OUTPUT_DATASET_NAME=$5
 export WORK_DIR=$6
 
-accelerate launch facechain/train_text_to_image_lora.py \
+accelerate launch facechain/preprocess_image.py \
     --pretrained_model_name_or_path=$MODEL_NAME \
     --revision=$VERSION \
     --sub_path=$SUB_PATH \
     --dataset_name=$DATASET_NAME \
     --output_dataset_name=$OUTPUT_DATASET_NAME \
     --caption_column="text" \
-    --resolution=512 --random_flip \
+    --resolution=1024 --random_flip \
     --train_batch_size=1 \
     --num_train_epochs=10 --checkpointing_steps=5000 \
     --learning_rate=1.5e-04 --lr_scheduler="cosine" --lr_warmup_steps=0 \

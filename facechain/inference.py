@@ -39,9 +39,13 @@ def txt2img(pipe, pos_prompt, neg_prompt, num_images=10):
     batch_size = 5
     images_out = []
     for i in range(int(num_images / batch_size)):
-        images_style = pipe(prompt=pos_prompt, height=512, width=512, guidance_scale=7, negative_prompt=neg_prompt,
-                            num_inference_steps=40, num_images_per_prompt=batch_size).images
+        images_style = pipe(prompt=pos_prompt, height=768, width=1024, guidance_scale=7, negative_prompt=neg_prompt,
+                            num_inference_steps=60, num_images_per_prompt=batch_size).images
         images_out.extend(images_style)
+    
+    print("Debug Info: the positive prompt used is: {}".format(pos_prompt))
+    print("Debug Info: the negative prompt used is: {}".format(neg_prompt))
+
     return images_out
 
 def img_pad(pil_file, fixed_height=512, fixed_width=512):
@@ -176,6 +180,62 @@ def main_diffusion_inference(pos_prompt, neg_prompt,
 
 
     
+    if len(add_prompt_style) > 0:
+        add_prompt_style = ", ".join(add_prompt_style) + ', '
+    else:
+        add_prompt_style = ''
+
+    pipe = pipe.to("cuda")
+    images_style = txt2img(pipe, trigger_style + add_prompt_style + pos_prompt, neg_prompt, num_images=10)
+    return images_style
+
+
+def main_diffusion_inference_no_lora(pos_prompt, neg_prompt,
+                             input_img_dir, base_model_path):
+
+    pipe = StableDiffusionPipeline.from_pretrained(base_model_path, safety_checker=None, torch_dtype=torch.float32)
+
+    train_dir = str(input_img_dir) + '_labeled'
+    add_prompt_style = []
+    f = open(os.path.join(train_dir, 'metadata.jsonl'), 'r')
+    tags_all = []
+    cnt = 0
+    cnts_trigger = np.zeros(6)
+    for line in f:
+        cnt += 1
+        data = json.loads(line)['text'].split(', ')
+        tags_all.extend(data)
+        if data[1] == 'a boy':
+            cnts_trigger[0] += 1
+        elif data[1] == 'a girl':
+            cnts_trigger[1] += 1
+        elif data[1] == 'a handsome man':
+            cnts_trigger[2] += 1
+        elif data[1] == 'a beautiful woman':
+            cnts_trigger[3] += 1
+        elif data[1] == 'a mature man':
+            cnts_trigger[4] += 1
+        elif data[1] == 'a mature woman':
+            cnts_trigger[5] += 1
+        else:
+            print('Error.')
+    f.close()
+
+    attr_idx = np.argmax(cnts_trigger)
+    trigger_styles = ['a boy, children, ', 'a girl, children, ', 'a handsome man, ', 'a beautiful woman, ',
+                      'a mature man, ', 'a mature woman, ']
+    trigger_style = '<fcsks>, ' + trigger_styles[attr_idx]
+    if attr_idx == 2 or attr_idx == 4:
+        neg_prompt += ', children'
+
+    print("Debug Info: the tags are {}".format(tags_all))
+
+    for tag in tags_all:
+        if tags_all.count(tag) > 0.5 * cnt:
+            if ('hair' in tag or 'face' in tag or 'mouth' in tag or 'skin' in tag or 'smile' in tag):
+                if not tag in add_prompt_style:
+                    add_prompt_style.append(tag)
+
     if len(add_prompt_style) > 0:
         add_prompt_style = ", ".join(add_prompt_style) + ', '
     else:
@@ -381,6 +441,25 @@ def main_model_inference(pose_model_path, pose_image, use_depth_control, pos_pro
                                                      **multiplier_style_kwargs, **multiplier_human_kwargs)
 
 
+
+def main_model_inference_no_lora(pose_model_path, pose_image, use_depth_control, pos_prompt, neg_prompt, use_main_model,
+                         input_img_dir=None, base_model_path=None,):
+    if use_main_model:
+        #if pose_image is None:
+        return main_diffusion_inference_no_lora(pos_prompt, neg_prompt, input_img_dir, base_model_path)
+        # else:
+        #     pose_image = compress_image(pose_image, 1024 * 1024)
+        #     if use_depth_control:
+        #         return main_diffusion_inference_multi(pose_model_path, pose_image, pos_prompt,
+        #                                               neg_prompt, input_img_dir, base_model_path, style_model_path,
+        #                                               lora_model_path,
+        #                                               **multiplier_style_kwargs, **multiplier_human_kwargs)
+        #     else:
+        #         return main_diffusion_inference_pose(pose_model_path, pose_image, pos_prompt, neg_prompt,
+        #                                              input_img_dir, base_model_path, style_model_path, lora_model_path,
+        #                                              **multiplier_style_kwargs, **multiplier_human_kwargs)
+
+
 def select_high_quality_face(input_img_dir):
     input_img_dir = str(input_img_dir) + '_labeled'
     quality_score_list = []
@@ -486,6 +565,76 @@ class GenPortrait:
                                            self.style_model_path, self.multiplier_style, self.multiplier_human,
                                            self.use_main_model, input_img_dir=input_img_dir,
                                            lora_model_path=lora_model_path, base_model_path=base_model_path)
+
+        # select_high_quality_face PIL
+        selected_face = select_high_quality_face(input_img_dir)
+        # face_swap cv2
+        swap_results = face_swap_fn(self.use_face_swap, gen_results, selected_face)
+        # pose_process
+        rank_results = post_process_fn(self.use_post_process, swap_results, selected_face,
+                                       num_gen_images=num_gen_images)
+        # stylization
+        final_gen_results = stylization_fn(self.use_stylization, rank_results)
+
+
+        return final_gen_results
+
+def compress_image(input_path, target_size):
+    output_path = change_extension_to_jpg(input_path)
+
+    image = cv2.imread(input_path)
+
+    quality = 95
+    try:
+        while cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, quality])[1].size > target_size:
+            quality -= 5
+    except:
+        import pdb;pdb.set_trace()
+
+    compressed_image = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, quality])[1].tostring()
+
+    with open(output_path, 'wb') as f:
+        f.write(compressed_image)
+    return output_path
+
+
+def change_extension_to_jpg(image_path):
+
+    base_name = os.path.basename(image_path)
+    new_base_name = os.path.splitext(base_name)[0] + ".jpg"
+
+    directory = os.path.dirname(image_path)
+
+    new_image_path = os.path.join(directory, new_base_name)
+    return new_image_path
+
+
+
+class GenPortraitNoLora:
+    def __init__(self, pose_model_path, pose_image, use_depth_control, pos_prompt, neg_prompt,
+                 use_main_model=True, use_face_swap=True,
+                 use_post_process=True, use_stylization=True):
+        self.use_main_model = use_main_model
+        self.use_face_swap = use_face_swap
+        self.use_post_process = use_post_process
+        self.use_stylization = use_stylization
+        self.pos_prompt = pos_prompt
+        self.neg_prompt = neg_prompt
+        self.pose_model_path = pose_model_path
+        self.pose_image = pose_image
+        self.use_depth_control = use_depth_control
+
+    def __call__(self, input_img_dir, num_gen_images=6, base_model_path=None,
+                 lora_model_path=None, sub_path=None, revision=None):
+        base_model_path = snapshot_download(base_model_path, revision=revision)
+        if sub_path is not None and len(sub_path) > 0:
+            base_model_path = os.path.join(base_model_path, sub_path)
+
+        # main_model_inference PIL
+        gen_results = main_model_inference_no_lora(self.pose_model_path, self.pose_image, self.use_depth_control,
+                                           self.pos_prompt, self.neg_prompt,
+                                           self.use_main_model, input_img_dir=input_img_dir,
+                                           base_model_path=base_model_path)
 
         # select_high_quality_face PIL
         selected_face = select_high_quality_face(input_img_dir)
