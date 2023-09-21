@@ -69,6 +69,9 @@ check_min_version("0.14.0.dev0")
 
 logger = get_logger(__name__, log_level="INFO")
 
+# set the cache path to the data disk, otherwise the models downloaded may be too large to handle
+os.environ['MODELSCOPE_CACHE'] = "/root/autodl-tmp" 
+
 
 class FaceCrop(torch.nn.Module):
 

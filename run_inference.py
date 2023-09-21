@@ -6,6 +6,8 @@ import cv2
 from facechain.utils import snapshot_download
 from facechain.constants import neg_prompt, pos_prompt_with_cloth, pos_prompt_with_style, styles, base_models
 
+# set the cache path to the data disk, otherwise the models downloaded may be too large to handle
+os.environ['MODELSCOPE_CACHE'] = "/root/autodl-tmp" 
 
 def generate_pos_prompt(style_model, prompt_cloth):
     if style_model in base_models[0]['style_list'][:-1] or style_model is None:
