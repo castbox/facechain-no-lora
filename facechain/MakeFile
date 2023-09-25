@@ -1,0 +1,24 @@
+lora_cv:
+    PYTHONPATH=. sh train_lora.sh "ly261666/cv_portrait_model" "v2.0" "film/film" "./imgs" "./processed" "./output"
+
+.PHONY: lora-magic
+lora-magic:
+    PYTHONPATH=. sh ./train_lora.sh "YorickHe/majicmixRealistic_v6" "v1.0.0" "realistic" "./imgs" "./processed" "./output"
+    
+.PHONY: lora-CyberRealistic
+lora-cyberrealistic:
+    PYTHONPATH=. sh ./train_lora.sh "/root/autodl-tmp/CyberRealistic_v32" "" "" "./imgs" "./processed" "./output"
+    
+    PYTHONPATH=. sh ./train_lora.sh "/root/autodl-tmp/CyberRealistic_v32" "" "" "./imgs/white_men" "./processed/white_men" "./output/white_men"
+    
+
+download_base_model:
+    wget https://civitai.com/api/download/models/114429 --content-disposition
+    
+clone_diffusers:
+    git clone https://github.com/huggingface/diffusers.git &&
+    git checkout -b convert_script tags/v0.19.0
+    
+    
+convert_safetensor:
+    python ./scripts/convert_original_stable_diffusion_to_diffusers.py --checkpoint_path ../cyberrealistic_v32.safetensors --dump_path ../CyberRealistic_v32 --from_safetensors
